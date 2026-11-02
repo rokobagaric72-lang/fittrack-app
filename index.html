@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="FitTrack">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Gewicht, Kalorien und Formbilder tracken">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <title>FitTrack</title>
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Übersicht</h1>
+    <div id="topaction"></div>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabs" aria-label="Navigation">
+    <button data-action="tab" data-tab="home">
+      <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/></svg>Übersicht
+    </button>
+    <button data-action="tab" data-tab="weight">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 11a4 4 0 0 1 8 0"/><path d="m12 11 1.6-2.4"/></svg>Gewicht
+    </button>
+    <button data-action="tab" data-tab="food">
+      <svg viewBox="0 0 24 24"><path d="M12 3c.8 3.6 5 5.2 5 10.2a5 5 0 0 1-10 0c0-2.6 1.4-4 2-6.2 1.4 1 2.4 2.4 2.6 4.2"/></svg>Kalorien
+    </button>
+    <button data-action="tab" data-tab="photos">
+      <svg viewBox="0 0 24 24"><path d="M4 8h3.2L9 5.5h6L16.8 8H20v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></svg>Fotos
+    </button>
+    <button data-action="tab" data-tab="profile">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1-4.2 4.2-6.2 7.5-6.2s6.5 2 7.5 6.2"/></svg>Profil
+    </button>
+  </nav>
+
+  <dialog id="dlg"></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
