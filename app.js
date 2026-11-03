@@ -359,6 +359,7 @@ const ico = {
   check: '<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
   cross: '<svg viewBox="0 0 24 24"><path d="M12 3v18M6.5 8.5h11"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
 };
 const card = (title, color, icon, body) => `<section class="card"><h2 style="color:${color}">${icon || ''}${title}</h2>${body}</section>`;
 const stat = (l, v, s = '', cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s ${cls}">${s}</div>` : ''}</div>`;
@@ -751,7 +752,9 @@ function viewCompare() {
 function viewProfile(I) {
   const p = I.p;
   const opt = (v, l, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${l}</option>`;
-  let h = '';
+  let h = card('Darstellung', 'var(--gold)', ico.sun,
+    seg('theme', [['auto', 'Automatisch'], ['light', '☀️ Hell'], ['dark', '🌙 Dunkel']], getTheme()) +
+    `<p class="sub">„Automatisch“ folgt der Einstellung deines iPhones.</p>`);
   if (!state.profile) h += `<section class="card"><b>Willkommen!</b><p class="small muted">Ein paar Angaben für deinen Kalorienbedarf. Du kannst alles später ändern.</p></section>`;
   h += `<form class="card" data-form="profile" autocomplete="off">
     <h2>Über dich</h2>
@@ -823,6 +826,22 @@ dlg.addEventListener('close', () => {
   dlg.innerHTML = '';
 });
 
+// Hell / Dunkel / Automatisch (pro Gerät gespeichert, wird schon im <head> angewendet)
+const THEME_KEY = 'fittrack-theme';
+function getTheme() { try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; } }
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === 'light' || t === 'dark') root.dataset.theme = t; else delete root.dataset.theme;
+  const forced = t === 'dark' ? '#0d1220' : t === 'light' ? '#f5efe3' : null;
+  document.querySelectorAll('meta[name=theme-color]').forEach((m, i) => {
+    m.content = forced || (m.media.includes('dark') ? '#0d1220' : '#f5efe3');
+  });
+}
+function setTheme(t) {
+  try { if (t === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch {}
+  applyTheme(t);
+}
+
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 // Objekt-URLs für Fotos (werden beim Löschen freigegeben)
@@ -862,6 +881,7 @@ const actions = {
     const v = el.dataset.val;
     ui[el.dataset.name] = v !== '' && !isNaN(+v) ? +v : v;
     if (el.dataset.name === 'cmpPose') ui.before = ui.after = null;
+    if (el.dataset.name === 'theme') setTheme(v);
     render();
   },
   day(el) {
@@ -1179,6 +1199,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function init() {
+  applyTheme(getTheme());
   render();
   try {
     photos = (await db.all()).sort((a, b) => b.date.localeCompare(a.date));

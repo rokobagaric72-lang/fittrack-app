@@ -24,8 +24,32 @@
   --serif: "New York", ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   color-scheme: light dark;
 }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1220;
+  --card: #161d2e;
+  --text: #f2ecdf;
+  --muted: #a49b89;
+  --sep: #26304a;
+  --input: #212a3f;
+  --tabbg: rgba(16, 22, 36, 0.92);
+  --accent: #d4ad5b;
+  --on-accent: #1a1406;
+  --gold: #d4ad5b;
+  --gold-soft: rgba(212, 173, 91, 0.12);
+  --blue: #6aa5ec;
+  --orange: #f0a04b;
+  --red: #ef6b5f;
+  --purple: #b39ddb;
+  --yellow: #f0c93e;
+  --green: #6cc48a;
+  --hero-1: #1a2c4b;
+  --hero-2: #10203a;
+}
+/* Automatisch: folgt der iPhone-Einstellung, solange nicht fest "Hell" gewählt ist */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0d1220;
     --card: #161d2e;
     --text: #f2ecdf;
