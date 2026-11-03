@@ -22,7 +22,7 @@ let state = loadState();
 let photos = [];
 const ui = {
   tab: 'home', range: 90, day: todayKey(), pose: 'all',
-  compare: false, cmpPose: 'Vorne', before: null, after: null, mode: 'slider',
+  compare: false, cmpPose: 'Vorne', before: null, after: null, mode: 'slider', avgType: 'week',
   planKind: 'todos', todoType: 'day', goalType: 'week', planDate: todayKey(),
 };
 let pendingPhoto = null;
@@ -213,9 +213,16 @@ function dayTotals(k) {
   return t;
 }
 
-function weeklySummaries(daily) {
-  const weeks = {};
-  const get = d => weeks[dayKey(weekStart(d))] ??= { w: [], kcal: [], steps: [] };
+function periodStart(type, d) {
+  if (type === 'week') return dayKey(weekStart(d));
+  if (type === 'month') return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  return String(d.getFullYear());
+}
+
+/** Durchschnitte pro Woche, Monat oder Jahr (neueste zuerst). */
+function periodSummaries(daily, type) {
+  const groups = {};
+  const get = d => groups[periodStart(type, d)] ??= { w: [], kcal: [], steps: [] };
   for (const p of daily) get(parseDay(p.day)).w.push(p.v);
   for (const k of Object.keys(state.days)) {
     const t = dayTotals(k);
@@ -224,12 +231,31 @@ function weeklySummaries(daily) {
   }
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
   let prev = null;
-  return Object.keys(weeks).sort().map(k => {
-    const w = weeks[k], a = avg(w.w);
-    const r = { start: k, avg: a, n: w.w.length, change: a != null && prev != null ? a - prev : null, kcal: avg(w.kcal), steps: avg(w.steps) };
+  return Object.keys(groups).sort().map(k => {
+    const g = groups[k], a = avg(g.w);
+    const r = { start: k, avg: a, n: g.w.length, change: a != null && prev != null ? a - prev : null, kcal: avg(g.kcal), steps: avg(g.steps) };
     if (a != null) prev = a;
     return r;
-  }).reverse();
+  }).filter(r => r.n || r.kcal != null || r.steps != null).reverse();
+}
+const weeklySummaries = daily => periodSummaries(daily, 'week');
+
+function periodName(type, k) {
+  if (type === 'week') {
+    const d = parseDay(k);
+    return { title: `KW ${isoWeek(d)}`, sub: `${fmtDay(k)} – ${fmtDay(dayKey(addDays(d, 6)))}`, short: `KW${isoWeek(d)}` };
+  }
+  if (type === 'month') {
+    const [y, m] = k.split('-').map(Number), d = new Date(y, m - 1, 1);
+    return { title: d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }), sub: '', short: d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', '') };
+  }
+  return { title: k, sub: '', short: k };
+}
+
+/** Alle Messungen mit Veränderung zur vorherigen Messung (neueste zuerst). */
+function measurementsWithDelta() {
+  const asc = [...state.weights].sort((a, b) => a.t.localeCompare(b.t));
+  return asc.map((w, i) => ({ ...w, delta: i ? w.kg - asc[i - 1].kg : null })).reverse();
 }
 
 // ============ Kalorien ============
@@ -315,7 +341,9 @@ function insights() {
     rate: weeklyRate(trend), today: dayTotals(todayKey()),
   };
 }
-const isGood = (I, c) => I.p.goal === 'lose' ? c <= 0 : I.p.goal === 'gain' ? c >= 0 : Math.abs(c) < 0.3;
+// Abnahme = grün, Zunahme = blau
+const dirClass = v => v < 0 ? 'down' : v > 0 ? 'up' : 'flat';
+const delta = (v, d = 1) => v == null ? '' : `<span class="delta ${dirClass(v)}">${v < 0 ? '▼' : v > 0 ? '▲' : '●'} ${signed(v, d)}</span>`;
 
 // ============ Bausteine ============
 const ico = {
@@ -362,6 +390,34 @@ function weightChart(daily, trend, target) {
   s += `<path d="${trend.map((p, i) => `${i ? 'L' : 'M'}${x(p.day).toFixed(1)},${y(p.v).toFixed(1)}`).join('')}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
   s += `<text x="${L}" y="${H - 6}">${fmtDay(daily[0].day)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtDay(daily.at(-1).day)}</text>`;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gewichtsverlauf">${s}</svg>`;
+}
+
+/** Liniendiagramm der Durchschnitte; Abschnitte nach unten grün, nach oben blau. */
+function avgChart(rows, type) {
+  const pts = rows.filter(r => r.avg != null).slice(-12);
+  const unit = { week: 'Wochen', month: 'Monaten', year: 'Jahren' }[type];
+  if (pts.length < 2) return `<div class="empty small">Ab 2 ${unit} mit Messungen siehst du hier den Verlauf.</div>`;
+  const W = 340, H = 200, L = 34, R = 14, T = 20, B = 22;
+  let lo = Math.min(...pts.map(p => p.avg)) - 0.5, hi = Math.max(...pts.map(p => p.avg)) + 0.5;
+  const x = i => L + 10 + i * (W - L - R - 20) / (pts.length - 1);
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  let s = '';
+  for (let i = 0; i <= 3; i++) {
+    const v = lo + (hi - lo) * i / 3;
+    s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 5}" y="${y(v) + 3}" text-anchor="end">${nf(v, 1)}</text>`;
+  }
+  for (let i = 1; i < pts.length; i++) {
+    const up = pts[i].avg > pts[i - 1].avg;
+    s += `<line x1="${x(i - 1)}" y1="${y(pts[i - 1].avg)}" x2="${x(i)}" y2="${y(pts[i].avg)}" stroke="var(${up ? '--blue' : '--green'})" stroke-width="3" stroke-linecap="round"/>`;
+  }
+  const showAll = pts.length <= 8, step = Math.ceil(pts.length / 6);
+  pts.forEach((p, i) => {
+    const c = i === 0 ? 'var(--gold)' : p.avg > pts[i - 1].avg ? 'var(--blue)' : 'var(--green)';
+    s += `<circle cx="${x(i)}" cy="${y(p.avg)}" r="4" fill="${c}" stroke="var(--card)" stroke-width="2"/>`;
+    if (showAll || i === pts.length - 1) s += `<text x="${x(i)}" y="${y(p.avg) - 9}" text-anchor="middle" style="fill:var(--text);font-weight:600">${nf(p.avg, 1)}</text>`;
+    if ((pts.length - 1 - i) % step === 0) s +=`<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${periodName(type, p.start).short}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Durchschnittsgewicht pro ${PERIODS[type]}">${s}</svg>`;
 }
 
 function kcalChart(target) {
@@ -431,13 +487,13 @@ function viewHome(I) {
       checklist('goals', gKey, goals, { readonly: true }));
   }
 
-  const tw = I.thisWeek;
+  const tw = I.thisWeek, lastM = measurementsWithDelta()[0];
   h += card('Gewicht', 'var(--blue)', ico.scale,
     `<div class="stats">
-      ${stat('Trendgewicht', kg(I.trend.at(-1)?.v), I.daily.length ? 'Letzte Waage: ' + kg(I.daily.at(-1).v) : 'Noch keine Messung')}
-      ${stat('Wochenschnitt', kg(tw?.avg), tw?.change != null ? signed(tw.change) + ' zur Vorwoche' : '', tw?.change != null ? (isGood(I, tw.change) ? 'good' : 'bad') : '')}
+      ${stat('Letzte Messung', lastM ? kg(lastM.kg) : '–', lastM?.delta != null ? delta(lastM.delta) + ' zur Messung davor' : 'Noch keine Messung')}
+      ${stat('Wochenschnitt', kg(tw?.avg), tw?.change != null ? delta(tw.change, 2) + ' zur Vorwoche' : '')}
     </div>
-    ${I.rate != null ? `<p class="small">Tempo der letzten 4 Wochen: <b>${signed(I.rate)} pro Woche</b></p>` : ''}
+    <p class="small">Trendgewicht: <b>${kg(I.trend.at(-1)?.v)}</b>${I.rate != null ? ` · Tempo (4 Wochen): ${delta(I.rate, 2)} pro Woche` : ''}</p>
     <button class="btn sec" data-action="addWeight" style="margin-top:14px">+ Gewicht eintragen</button>`);
 
   const left = I.target - I.today.kcal;
@@ -470,7 +526,7 @@ function viewHome(I) {
 
 function viewWeight(I) {
   const c = ui.range ? dayKey(addDays(new Date(), -ui.range)) : '';
-  let body = seg('range', [[30, '30 T'], [90, '90 T'], [365, '1 J'], [0, 'Alle']], ui.range);
+  let body = seg('range', [[7, '7 T'], [30, '30 T'], [90, '90 T'], [365, '1 J'], [0, 'Alle']], ui.range);
   if (!I.daily.length) {
     body += `<div class="empty">Noch keine Messungen.<br>Tippe oben rechts auf <b>+</b>.</div>`;
   } else {
@@ -478,31 +534,35 @@ function viewWeight(I) {
     body += `<div style="margin-top:14px">${weightChart(I.daily.filter(p => p.day >= c), I.trend.filter(p => p.day >= c), target)}</div>
       <div class="stats three" style="margin-top:14px">
         ${stat('Trend', kg(cur))}
-        ${stat('Pro Woche', I.rate != null ? signed(I.rate) : '–', 'Ø 4 Wochen')}
+        ${stat('Pro Woche', I.rate != null ? `<span class="${dirClass(I.rate)}">${signed(I.rate)}</span>` : '–', 'Ø 4 Wochen')}
         ${target ? stat('Bis zum Ziel', kg(Math.abs(cur - target)), eta(cur - target, I.rate)) : ''}
       </div>`;
   }
   let h = `<section class="card">${body}</section>`;
 
-  const weeks = I.weeks.filter(w => w.n || w.kcal != null || w.steps != null);
-  if (weeks.length) {
-    h += card('Wochenschnitte', 'var(--text)', ico.list, `<div class="list">${weeks.map(w => {
-      const d = parseDay(w.start), e = addDays(d, 6);
-      const info = [`${w.n}× gewogen`, w.kcal != null && `Ø ${kcal(w.kcal)}`, w.steps != null && `Ø ${int(w.steps)} Schritte`].filter(Boolean).join(' · ');
-      return `<div class="li"><div class="grow"><b>KW ${isoWeek(d)}</b> <span class="sub">${fmtDay(w.start)} – ${fmtDay(dayKey(e))}</span><div class="sub">${info}</div></div>
-        <div style="text-align:right"><b>${kg(w.avg)}</b>${w.change != null ? `<div class="sub ${isGood(I, w.change) ? 'good' : 'bad'}"><b>${signed(w.change)}</b></div>` : ''}</div></div>`;
-    }).join('')}</div>`);
+  const type = ui.avgType, rows = periodSummaries(I.daily, type);
+  if (rows.length) {
+    h += card(`Durchschnitt pro ${PERIODS[type]}`, 'var(--text)', ico.chart,
+      seg('avgType', [['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr']], type) +
+      `<div style="margin-top:12px">${avgChart([...rows].reverse(), type)}</div>
+      <p class="sub" style="text-align:center"><span class="down">● runter</span> &nbsp; <span class="up">● hoch</span></p>
+      <div class="list" style="margin-top:6px">${rows.map(r => {
+        const n = periodName(type, r.start);
+        const info = [`${r.n}× gewogen`, r.kcal != null && `Ø ${kcal(r.kcal)}`, r.steps != null && `Ø ${int(r.steps)} Schritte`].filter(Boolean).join(' · ');
+        return `<div class="li"><div class="grow"><b>${n.title}</b> ${n.sub ? `<span class="sub">${n.sub}</span>` : ''}<div class="sub">${info}</div></div>
+          <div style="text-align:right"><b>${kg(r.avg)}</b>${r.change != null ? `<div class="sub">${delta(r.change, 2)}</div>` : ''}</div></div>`;
+      }).join('')}</div>`);
   }
 
   h += `<section class="card plain">${verse(V.patience)}</section>`;
 
   if (state.weights.length) {
-    const list = [...state.weights].sort((a, b) => b.t.localeCompare(a.t));
-    h += card('Alle Messungen', 'var(--text)', '', `<div class="list">${list.map(w => {
+    h += card('Alle Messungen', 'var(--text)', ico.list, `<div class="list">${measurementsWithDelta().map(w => {
       const d = new Date(w.t);
       return `<div class="li"><div class="grow">${d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit' })}
         <span class="sub">${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span></div>
-        <b>${kg(w.kg)}</b><button class="x" data-action="delWeight" data-id="${w.id}" aria-label="Löschen">×</button></div>`;
+        <div style="text-align:right"><b>${kg(w.kg)}</b>${w.delta != null ? `<div class="sub">${delta(w.delta)}</div>` : ''}</div>
+        <button class="x" data-action="delWeight" data-id="${w.id}" aria-label="Löschen">×</button></div>`;
     }).join('')}</div>`);
   }
   return { html: h, action: `<button class="iconbtn" data-action="addWeight" aria-label="Gewicht eintragen">+</button>` };
@@ -678,7 +738,7 @@ function viewCompare() {
       : `<div class="side"><img src="${b}" alt="Vorher"><img src="${a}" alt="Nachher"></div>`;
     const days = daysBetween(before.date, after.date);
     h += `<section class="card"><div class="stats">${stat('Zeitraum', `${days} Tage`, `${fmtDay(before.date)} → ${fmtDay(after.date)}`)}
-      ${before.kg && after.kg ? stat('Gewicht', signed(after.kg - before.kg, 1), `${kg(before.kg)} → ${kg(after.kg)}`) : ''}</div></section>`;
+      ${before.kg && after.kg ? stat('Gewicht', `<span class="${dirClass(after.kg - before.kg)}">${signed(after.kg - before.kg, 1)}</span>`, `${kg(before.kg)} → ${kg(after.kg)}`) : ''}</div></section>`;
   } else {
     h += `<div class="empty">Für „${ui.cmpPose}“ brauchst du mindestens 2 Fotos.</div>`;
   }

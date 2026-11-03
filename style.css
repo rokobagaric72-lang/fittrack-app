@@ -106,6 +106,10 @@ main { display: flex; flex-direction: column; gap: 14px; max-width: 640px; margi
 .good { color: var(--green) !important; }
 .bad { color: var(--orange) !important; }
 .danger { color: var(--red) !important; }
+.down { color: var(--green) !important; }
+.up { color: var(--blue) !important; }
+.delta { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.delta.flat { color: var(--muted); }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .sub { font-size: 12px; color: var(--muted); }
